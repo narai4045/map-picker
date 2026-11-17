@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
@@ -27,7 +27,10 @@
             <div id="locTitle" style="font-size: 13px; color: #555;">拖动红点或点击地图任意位置</div>
             <div style="margin-top: 4px;">WGS-84 GPS: <span class="coords" id="coordText">--</span></div>
         </div>
-        <button class="btn" id="confirmBtn" onclick="confirmLocation()">确定填入</button>
+                <div style="display:flex; gap:8px;">
+            <button class="btn" style="background:#5f6368;" onclick="copyCoords()">复制坐标</button>
+            <button class="btn" id="confirmBtn" onclick="confirmLocation()">确定填入</button>
+        </div>
     </div>
     <script>
         var urlParams = new URLSearchParams(window.location.search);
@@ -66,6 +69,29 @@
             if (window.AndroidBridge && window.AndroidBridge.onLocationSelected) {
                 window.AndroidBridge.onLocationSelected(lng, lat, title || "");
             }
+        }
+
+                function copyCoords() {
+            var text = curLng.toFixed(6) + ',' + curLat.toFixed(6);
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function() {
+                    alert('已复制经纬度: ' + text + '\n(格式: 经度,纬度)');
+                }).catch(function() {
+                    fallbackCopy(text);
+                });
+            } else {
+                fallbackCopy(text);
+            }
+        }
+
+        function fallbackCopy(text) {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            alert('已复制经纬度: ' + text + '\n(格式: 经度,纬度)');
         }
 
         function confirmLocation() {
