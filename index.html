@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0, user-scalable=no, width=device-width">
+    <title>百度地图在线选点</title>
+    <script type="text/javascript" src="https://api.map.baidu.com/api?v=3.0&ak=wQ1d3Rp74pqfPkx7YoY2VrLdV25ccQzR"></script>
+    <style>
+        * { box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f0f0; }
+        #map { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+        #searchBox { position: absolute; top: 12px; left: 12px; right: 12px; z-index: 1000; }
+        #suggestId { width: 100%; height: 46px; padding: 0 16px; border-radius: 23px; border: 1px solid #1a73e8; outline: none; box-shadow: 0 3px 10px rgba(0,0,0,0.25); font-size: 15px; background: #ffffff; }
+        .tangram-suggestion-main { z-index: 99999 !important; }
+        #infoCard { position: absolute; bottom: 16px; left: 16px; right: 16px; z-index: 1000; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(8px); padding: 14px 18px; border-radius: 14px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); display: flex; justify-content: space-between; align-items: center; }
+        .coords { font-weight: bold; color: #1a73e8; font-family: monospace; font-size: 14px; }
+        .btn { background: #1a73e8; color: #fff; border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="searchBox"><input id="suggestId" type="text" placeholder="🔍 搜索地名、商圈或地址..." /></div>
+    <div id="map"></div>
+    <div id="infoCard">
+        <div>
+            <div id="locTitle" style="font-size: 13px; color: #555;">拖动红点或点击地图选点</div>
+            <div style="margin-top: 4px;">WGS-84 GPS: <span class="coords" id="coordText">--</span></div>
+        </div>
+        <button class="btn" id="confirmBtn" onclick="confirmLocation()">确定填入</button>
+    </div>
+    <script>
+        // 坐标系转换：BD-09 转 WGS-84
+        var X_PI = 3.14159265358979324 * 3000.0 / 180.0;
+        var PI = 3.1415926535897932384626;
+        var A = 6378245.0;
+        var EE = 0.00669342162296594323;
+
+        function bd09ToGcj02(bdLng, bdLat) {
+            var x = bdLng - 0.0065, y = bdLat - 0.006;
+            var z = Math.sqrt(x * x + y * y) - 0.00002 * Math.sin(y * X_PI);
+            var theta = Math.atan2(y, x) - 0.000003 * Math.cos(x * X_PI);
+            return [z * Math.cos(theta), z * Math.sin(theta)];
+        }
+
+        function gcj02ToWgs84(lng, lat) {
+            if (lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271) return [lng, lat];
+            var dlat = transformLat(lng - 105.0, lat - 35.0);
+            var dlng = transformLng(lng - 105.0, lat - 35.0);
+            var radlat = lat / 180.0 * PI;
+            var magic = Math.sin(radlat);
+            magic = 1 - EE * magic * magic;
+            var sqrtmagic = Math.sqrt(magic);
+            dlat = (dlat * 180.0) / ((A * (1 - EE)) / (magic * sqrtmagic) * PI);
+            dlng = (dlng * 180.0) / (A / sqrtmagic * Math.cos(radlat) * PI);
+            return [lng * 2 - (lng + dlng), lat * 2 - (lat + dlat)];
+        }
+
+        function transformLat(lng, lat) {
+            var ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * Math.sqrt(Math.abs(lng));
+            ret += (20.0 * Math.sin(6.0 * lng * PI) + 20.0 * Math.sin(2.0 * lng * PI)) * 2.0 / 3.0;
+            ret += (20.0 * Math.sin(lat * PI) + 40.0 * Math.sin(lat / 3.0 * PI)) * 2.0 / 3.0;
+            ret += (160.0 * Math.sin(lat / 12.0 * PI) + 320 * Math.sin(lat * PI / 30.0)) * 2.0 / 3.0;
+            return ret;
+        }
+
+        function transformLng(lng, lat) {
+            var ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * Math.sqrt(Math.abs(lng));
+            ret += (20.0 * Math.sin(6.0 * lng * PI) + 20.0 * Math.sin(2.0 * lng * PI)) * 2.0 / 3.0;
+            ret += (20.0 * Math.sin(lng * PI) + 40.0 * Math.sin(lng / 3.0 * PI)) * 2.0 / 3.0;
+            ret += (150.0 * Math.sin(lng / 12.0 * PI) + 300.0 * Math.sin(lng / 30.0 * PI)) * 2.0 / 3.0;
+            return ret;
+        }
+
+        function bd09ToWgs84(bdLng, bdLat) {
+            var gcj = bd09ToGcj02(bdLng, bdLat);
+            return gcj02ToWgs84(gcj[0], gcj[1]);
+        }
+
+        // 获取 URL 传参作为初始中心点
+        var urlParams = new URLSearchParams(window.location.search);
+        var initLng = parseFloat(urlParams.get('lng')) || 116.404;
+        var initLat = parseFloat(urlParams.get('lat')) || 39.915;
+
+        var map = new BMap.Map("map");
+        var point = new BMap.Point(initLng, initLat);
+        map.centerAndZoom(point, 16);
+        map.enableScrollWheelZoom(true);
+
+        var marker = new BMap.Marker(point, { enableDragging: true });
+        map.addOverlay(marker);
+
+        var geoc = new BMap.Geocoder();
+        var curWgsLng = initLng, curWgsLat = initLat;
+
+        function update(pt, title) {
+            marker.setPosition(pt);
+            var wgs = bd09ToWgs84(pt.lng, pt.lat);
+            curWgsLng = wgs[0];
+            curWgsLat = wgs[1];
+            document.getElementById('coordText').innerText = curWgsLng.toFixed(6) + ', ' + curWgsLat.toFixed(6);
+
+            if (title) {
+                document.getElementById('locTitle').innerText = title;
+                notifyAndroid(curWgsLng, curWgsLat, title);
+            } else {
+                geoc.getLocation(pt, function(rs) {
+                    var addr = rs ? rs.address : '';
+                    if (addr) document.getElementById('locTitle').innerText = addr;
+                    notifyAndroid(curWgsLng, curWgsLat, addr);
+                });
+            }
+        }
+
+        function notifyAndroid(lng, lat, title) {
+            if (window.AndroidBridge && window.AndroidBridge.onLocationSelected) {
+                window.AndroidBridge.onLocationSelected(lng, lat, title || "");
+            }
+        }
+
+        function confirmLocation() {
+            if (window.AndroidBridge && window.AndroidBridge.onConfirm) {
+                window.AndroidBridge.onConfirm(curWgsLng, curWgsLat);
+            } else {
+                alert('已选定 WGS-84 坐标: ' + curWgsLng.toFixed(6) + ', ' + curWgsLat.toFixed(6));
+            }
+        }
+
+        marker.addEventListener("dragend", function(e) { update(e.point); });
+        map.addEventListener("click", function(e) { update(e.point); });
+
+        var ac = new BMap.Autocomplete({ "input": "suggestId", "location": map });
+        ac.addEventListener("onconfirm", function(e) {
+            var _value = e.item.value;
+            var myValue = _value.province + _value.city + _value.district + _value.street + _value.business;
+            var local = new BMap.LocalSearch(map, {
+                onSearchComplete: function() {
+                    var pp = local.getResults().getPoi(0);
+                    if (pp) {
+                        map.panTo(pp.point);
+                        update(pp.point, myValue);
+                    }
+                }
+            });
+            local.search(myValue);
+        });
+
+        // 初始化显示
+        update(point);
+    </script>
+</body>
+</html>
