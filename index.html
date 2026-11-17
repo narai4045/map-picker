@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0, user-scalable=no, width=device-width">
-    <title>全球地图选点 (Global Map Picker)</title>
+    <title>全球地图选点 (OSM 官方高清原版)</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
@@ -27,14 +27,14 @@
             <div id="locTitle" style="font-size: 13px; color: #555;">拖动红点或点击地图任意位置</div>
             <div style="margin-top: 4px;">WGS-84 GPS: <span class="coords" id="coordText">--</span></div>
         </div>
-                <div style="display:flex; gap:8px;">
+        <div style="display:flex; gap:8px;">
             <button class="btn" style="background:#5f6368;" onclick="copyCoords()">复制坐标</button>
             <button class="btn" id="confirmBtn" onclick="confirmLocation()">确定填入</button>
         </div>
     </div>
     <script>
         var urlParams = new URLSearchParams(window.location.search);
-        var initLng = parseFloat(urlParams.get('lng')) || 139.767125; // 默认东京站附近或北京
+        var initLng = parseFloat(urlParams.get('lng')) || 139.767125;
         var initLat = parseFloat(urlParams.get('lat')) || 35.681236;
 
         var map = L.map('map', {
@@ -43,11 +43,10 @@
             zoomControl: true
         });
 
-        // 采用 CartoDB 全球高性能免费瓦片（全球秒开，高清细致，免Key）
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            subdomains: 'abcd',
+        // 切换为 OpenStreetMap 官方完全免费公有瓦片源（永不要求 API KEY）
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
-            attribution: '&copy; OpenStreetMap &copy; CARTO'
+            attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
 
         var marker = L.marker([initLat, initLng], { draggable: true }).addTo(map);
@@ -71,7 +70,7 @@
             }
         }
 
-                function copyCoords() {
+        function copyCoords() {
             var text = curLng.toFixed(6) + ',' + curLat.toFixed(6);
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(text).then(function() {
