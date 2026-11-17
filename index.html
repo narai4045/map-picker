@@ -1,1 +1,118 @@
-﻿<html><body>Map Picker Private</body></html>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0, user-scalable=no, width=device-width">
+    <title>全球地图选点 (Global Map Picker)</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #e0e0e0; }
+        #map { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+        #searchBox { position: absolute; top: 12px; left: 12px; right: 12px; z-index: 1000; }
+        #searchInput { width: 100%; height: 46px; padding: 0 16px; border-radius: 23px; border: 1px solid #1a73e8; outline: none; box-shadow: 0 3px 10px rgba(0,0,0,0.25); font-size: 15px; background: #ffffff; }
+        #infoCard { position: absolute; bottom: 16px; left: 16px; right: 16px; z-index: 1000; background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(8px); padding: 14px 18px; border-radius: 14px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); display: flex; justify-content: space-between; align-items: center; }
+        .coords { font-weight: bold; color: #1a73e8; font-family: monospace; font-size: 14px; }
+        .btn { background: #1a73e8; color: #fff; border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="searchBox">
+        <input id="searchInput" type="text" placeholder="🔍 搜索全球地名/商圈/城市 (回车定位)..." />
+    </div>
+    <div id="map"></div>
+    <div id="infoCard">
+        <div>
+            <div id="locTitle" style="font-size: 13px; color: #555;">拖动红点或点击地图任意位置</div>
+            <div style="margin-top: 4px;">WGS-84 GPS: <span class="coords" id="coordText">--</span></div>
+        </div>
+        <button class="btn" id="confirmBtn" onclick="confirmLocation()">确定填入</button>
+    </div>
+    <script>
+        var urlParams = new URLSearchParams(window.location.search);
+        var initLng = parseFloat(urlParams.get('lng')) || 139.767125; // 默认东京站附近或北京
+        var initLat = parseFloat(urlParams.get('lat')) || 35.681236;
+
+        var map = L.map('map', {
+            center: [initLat, initLng],
+            zoom: 15,
+            zoomControl: true
+        });
+
+        // 采用 CartoDB 全球高性能免费瓦片（全球秒开，高清细致，免Key）
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            subdomains: 'abcd',
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap &copy; CARTO'
+        }).addTo(map);
+
+        var marker = L.marker([initLat, initLng], { draggable: true }).addTo(map);
+        var curLng = initLng, curLat = initLat;
+
+        function updateCoords(lat, lng, title) {
+            curLat = lat;
+            curLng = lng;
+            document.getElementById('coordText').innerText = lng.toFixed(6) + ', ' + lat.toFixed(6);
+            if (title) {
+                document.getElementById('locTitle').innerText = title;
+                notifyAndroid(lng, lat, title);
+            } else {
+                notifyAndroid(lng, lat, "");
+            }
+        }
+
+        function notifyAndroid(lng, lat, title) {
+            if (window.AndroidBridge && window.AndroidBridge.onLocationSelected) {
+                window.AndroidBridge.onLocationSelected(lng, lat, title || "");
+            }
+        }
+
+        function confirmLocation() {
+            if (window.AndroidBridge && window.AndroidBridge.onConfirm) {
+                window.AndroidBridge.onConfirm(curLng, curLat);
+            } else {
+                alert('已选定: ' + curLng.toFixed(6) + ', ' + curLat.toFixed(6));
+            }
+        }
+
+        marker.on('dragend', function(e) {
+            var pos = marker.getLatLng();
+            updateCoords(pos.lat, pos.lng, "已拖拽至新位置");
+        });
+
+        map.on('click', function(e) {
+            marker.setLatLng(e.latlng);
+            updateCoords(e.latlng.lat, e.latlng.lng, "已选定位置");
+        });
+
+        var input = document.getElementById('searchInput');
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                var q = input.value.trim();
+                if (!q) return;
+                input.blur();
+                fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(q))
+                    .then(function(res) { return res.json(); })
+                    .then(function(data) {
+                        if (data && data.length > 0) {
+                            var first = data[0];
+                            var lat = parseFloat(first.lat);
+                            var lon = parseFloat(first.lon);
+                            marker.setLatLng([lat, lon]);
+                            map.panTo([lat, lon]);
+                            updateCoords(lat, lon, first.display_name);
+                        } else {
+                            alert('未找到该地点，请换一个关键词或手动在地图上缩放选点');
+                        }
+                    })
+                    .catch(function(err) {
+                        console.error(err);
+                    });
+            }
+        });
+
+        updateCoords(initLat, initLng, "当前位置");
+    </script>
+</body>
+</html>
